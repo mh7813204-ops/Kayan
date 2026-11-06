@@ -41,6 +41,7 @@ button.go[disabled]{opacity:.6}
 .about{margin-top:16px;text-align:right;border-top:1px solid var(--line);padding-top:12px;color:var(--muted)}
 .about h3{margin:0 0 6px;color:var(--ink);font-size:1rem}
 .about p{margin:0}
+.alertbox{margin:14px 0 0;padding:12px;border-radius:12px;background:var(--sun);color:var(--on-sun);font-weight:800;text-align:center}
 </style>
 </head>
 <body>
@@ -79,6 +80,14 @@ var service=null,pay=null;
 var PAYS=['كاش','إنستا باي','فيزا'];
 function el(t,c,txt){var e=document.createElement(t);if(c)e.className=c;if(txt)e.textContent=txt;return e}
 function $(id){return document.getElementById(id)}
+function cleanPhone(v){
+  v=String(v).replace(/[٠-٩]/g,function(c){return c.charCodeAt(0)-1632}).replace(/[۰-۹]/g,function(c){return c.charCodeAt(0)-1776});
+  var d=v.replace(/\D/g,'');
+  if(d.indexOf('0020')===0)d=d.slice(2);
+  if(d.indexOf('20')===0&&d.length>=12)d='0'+d.slice(2);
+  else if(d.length===10&&d.charAt(0)==='1')d='0'+d;
+  return d;
+}
 function todayStr(){var d=new Date();return d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate()}
 
 var sv=$('services');
@@ -104,11 +113,19 @@ function msgFor(f,n){
 }
 function waLink(m){return 'https://wa.me/'+WA+'?text='+encodeURIComponent(m)}
 
-function show(n,ahead,f){
+function render(n,ahead,f,state){
   var d=$('done');d.textContent='';
   d.appendChild(el('span','','رقم دورك'));
   d.appendChild(el('b','',String(n)));
-  d.appendChild(el('span','',ahead===0?'مفيش حد قدامك، تعالى دلوقتي.':'قدامك '+ahead+' عربية.'));
+  var msg=null;
+  if(state==='جاهزة')msg='🎉 عربيتك خلصت وجاهزة! تعالى استلمها.';
+  else if(state==='تم')msg='✅ تم تسليم العربية. شكرًا لثقتك في كيان.';
+  else if(state==='بتتغسل')msg='🚿 عربيتك بتتغسل دلوقتي.';
+  else if(state==='لاغي')msg='❌ الدور ده اتلغى. لو لسه عاوز الخدمة، اطلب رقم جديد.';
+  else if(ahead===0)msg='🔔 دورك دلوقتي! تعالى المغسلة.';
+  else if(ahead===1)msg='⏰ قدامك عربية واحدة بس، جهّز نفسك وفضّي العربية من متعلقاتك.';
+  if(!state)d.appendChild(el('span','',ahead===0?'مفيش حد قدامك.':'قدامك '+ahead+' عربية.'));
+  if(msg)d.appendChild(el('p','alertbox',msg));
   var w=el('div','warn');w.appendChild(el('p','','تعليمات مهمة'));
   var ul=document.createElement('ul');
   ['فضّي العربية من أي متعلقات شخصية قبل دورك.','لو وصل دورك ومكنتش موجود خلال 5 دقايق، الحجز بيعتبر لاغي.','الإدارة غير مسؤولة عن فقدان أي متعلقات شخصية.'].forEach(function(t){ul.appendChild(el('li','',t))});
@@ -118,7 +135,7 @@ function show(n,ahead,f){
   var r=el('button','btn2','حدّث دوري');r.type='button';
   r.addEventListener('click',function(){
     r.disabled=true;
-    fetch(API+'?action=status&n='+n).then(function(x){return x.json()}).then(function(j){show(n,j.ahead,f)})
+    fetch(API+'?action=status&n='+n).then(function(x){return x.json()}).then(function(j){show(n,j.ahead,f,j.state)})
     .catch(function(){r.disabled=false;r.textContent='مقدرتش أحدّث، جرّب تاني'});
   });
   d.appendChild(r);
@@ -135,15 +152,42 @@ function show(n,ahead,f){
   d.style.display='block';$('formArea').style.display='none';
 }
 
+var pollT=null,lastKey=null,audioCtx=null;
+function unlockAudio(){try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume()}catch(e){}}
+function beep(){try{if(!audioCtx)return;var o=audioCtx.createOscillator(),g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);o.frequency.value=880;g.gain.value=0.2;o.start();o.stop(audioCtx.currentTime+0.4)}catch(e){}}
+function alertUser(j){
+  try{if(navigator.vibrate)navigator.vibrate([300,150,300,150,300])}catch(e){}
+  beep();
+  var t=document.title;
+  document.title=j.state==='جاهزة'?'🎉 عربيتك جاهزة':j.state==='بتتغسل'?'🚿 بتتغسل':j.state==='تم'?'✅ تم':j.ahead===0?'🔔 دورك دلوقتي':'⏰ قدامك عربية';
+  setTimeout(function(){document.title=t},8000);
+}
+function startPoll(n,f){
+  if(pollT)clearInterval(pollT);
+  pollT=setInterval(function(){
+    fetch(API+'?action=status&n='+n).then(function(x){return x.json()}).then(function(j){
+      var key=j.ahead+'|'+(j.state||'');
+      if(key!==lastKey){
+        lastKey=key;
+        if(j.state==='جاهزة'||j.state==='بتتغسل'||j.state==='تم'||j.state==='لاغي'||(!j.state&&(j.ahead===1||j.ahead===0)))alertUser(j);
+        render(n,j.ahead,f,j.state);
+      }
+      if(j.state==='تم'||j.state==='لاغي')clearInterval(pollT);
+    }).catch(function(){});
+  },30000);
+}
+function show(n,ahead,f,state){lastKey=ahead+'|'+(state||'');render(n,ahead,f,state);if(state!=='تم'&&state!=='لاغي')startPoll(n,f)}
+
 try{
   var saved=JSON.parse(localStorage.getItem('kayanQ')||'null');
   if(saved&&saved.d===todayStr()){
-    fetch(API+'?action=status&n='+saved.n).then(function(x){return x.json()}).then(function(j){show(saved.n,j.ahead,saved.f)}).catch(function(){});
+    fetch(API+'?action=status&n='+saved.n).then(function(x){return x.json()}).then(function(j){show(saved.n,j.ahead,saved.f,j.state)}).catch(function(){});
   }
 }catch(e){}
 
 $('send').addEventListener('click',function(){
-  var f={service:service,pay:pay,name:$('name').value.trim(),phone:$('phone').value.trim(),
+  unlockAudio();
+  var f={service:service,pay:pay,name:$('name').value.trim(),phone:cleanPhone($('phone').value),
     car:$('car').value.trim(),plate:$('plate').value.trim(),notes:$('notes').value.trim()};
   var err=$('err');
   if(!f.service)return err.textContent='اختار الخدمة.';
