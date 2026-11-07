@@ -73,13 +73,21 @@ button.go[disabled]{opacity:.6}
 </main>
 
 <script>
-var API='https://script.google.com/macros/s/AKfycbweephFsbUdAm1CczHaS_JoBD1cIwEFzqdcrTDAkd8DUynGRw4txSeC8T55vsRYRkr_Pw/exec';
+var API='https://script.google.com/macros/s/AKfycbxNmD9kkyMJviTFJvul_WZQ5pfGhuNkv4Vi82vdGEqeBobMtwLXZ1CMzxDf0oOMnwUpYA/exec';
 var WA='201111959156';
 var SERVICES=['غسيل داخلي وخارجي','غسيل بريميوم','غسيل خارجي','غسيل داخلي','غسيل كيماوي','غسيل داخلي وخارجي وشنطة','غسيل داخلي وخارجي وشنطة وماتور كيماوي','غسيل داخلي وخارجي وشنطة وماتور مياه وصابون','تلميع فوانيس','تلميع بولش'];
 var service=null,pay=null;
 var PAYS=['كاش','إنستا باي','فيزا'];
 function el(t,c,txt){var e=document.createElement(t);if(c)e.className=c;if(txt)e.textContent=txt;return e}
 function $(id){return document.getElementById(id)}
+function newRid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
+var rid=newRid(),sending=false;
+function normPlate(v){
+  v=String(v).replace(/[٠-٩]/g,function(c){return c.charCodeAt(0)-1632}).replace(/[۰-۹]/g,function(c){return c.charCodeAt(0)-1776}).replace(/[\u064B-\u0652\u0640]/g,'').replace(/\s+/g,' ').trim();
+  if(v.replace(/[\u0621-\u064Aa-zA-Z\d \-]/g,'')!=='')return '';
+  var L=(v.match(/[\u0621-\u064Aa-zA-Z]/g)||[]).length,D=(v.match(/\d/g)||[]).length;
+  return(L>=1&&L<=3&&D>=2&&D<=4)?v:'';
+}
 function cleanPhone(v){
   v=String(v).replace(/[٠-٩]/g,function(c){return c.charCodeAt(0)-1632}).replace(/[۰-۹]/g,function(c){return c.charCodeAt(0)-1776});
   var d=v.replace(/\D/g,'');
@@ -194,16 +202,21 @@ $('send').addEventListener('click',function(){
   if(!f.pay)return err.textContent='اختار طريقة الدفع.';
   if(!f.name)return err.textContent='اكتب اسمك.';
   if(f.phone.replace(/\D/g,'').length<10)return err.textContent='اكتب رقم موبايل صحيح.';
-  if(!f.plate)return err.textContent='اكتب رقم العربية.';
+  var pn=normPlate(f.plate);
+  if(!pn)return err.textContent='اكتب رقم العربية بشكل صحيح، مثال: أ ب ج 1234';
+  f.plate=pn;
   err.textContent='';
+  if(sending)return;sending=true;
   var b=$('send');b.disabled=true;b.textContent='ثواني...';
   var q='?action=join&service='+encodeURIComponent(f.service)+'&name='+encodeURIComponent(f.name)+
     '&phone='+encodeURIComponent(f.phone)+'&car='+encodeURIComponent(f.car)+
-    '&plate='+encodeURIComponent(f.plate)+'&notes='+encodeURIComponent('الدفع: '+f.pay+(f.notes?' | '+f.notes:''));
+    '&plate='+encodeURIComponent(f.plate)+'&rid='+rid+'&notes='+encodeURIComponent('الدفع: '+f.pay+(f.notes?' | '+f.notes:''));
   fetch(API+q).then(function(x){return x.json()}).then(function(j){
     try{localStorage.setItem('kayanQ',JSON.stringify({d:todayStr(),n:j.n,f:f}))}catch(e){}
+    sending=false;rid=newRid();
     show(j.n,j.ahead,f);
   }).catch(function(){
+    sending=false;
     b.disabled=false;b.textContent='خدلي رقم دور';
     err.textContent='حصلت مشكلة في أخد الرقم. ابعت بياناتك على واتساب وهنرد عليك.';
     var a=el('a','btn','ابعت على واتساب');a.href=waLink(msgFor(f,null));a.target='_blank';a.rel='noopener';
