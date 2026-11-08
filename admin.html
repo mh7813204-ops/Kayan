@@ -78,6 +78,7 @@ input,select,textarea{width:100%;padding:11px 12px;border-radius:10px;border:1.5
 <b>تسجيل عميل من الكاشير</b>
 <label>الخدمة</label><select id="aSvc"></select>
 <label>الاسم</label><input type="text" id="aName">
+<label>نوع العربية (اختياري)</label><input type="text" id="aCar" placeholder="مثال: هيونداي النترا">
 <label>رقم العربية (اختياري)</label><input type="text" id="aPlate">
 <label>رقم الموبايل (اختياري)</label><input type="tel" id="aPhone" inputmode="tel">
 <label>ملاحظات (اختياري)</label><input type="text" id="aNotes">
@@ -153,7 +154,7 @@ function set(r,field,val){
 }
 function match(r){
   if(!q)return true;
-  var s=(r.name+' '+r.plate+' '+r.phone+' '+r.n+' '+r.service).toLowerCase();
+  var s=(r.name+' '+r.car+' '+r.plate+' '+r.phone+' '+r.n+' '+r.service).toLowerCase();
   return s.indexOf(q.toLowerCase())>-1;
 }
 function render(){
@@ -178,7 +179,7 @@ function render(){
     var top=el('div','top');top.appendChild(el('div','num',r.n));
     var info=el('div','info');info.appendChild(el('b','',r.name||'—'));
     info.appendChild(el('small','',r.service||''));
-    var meta=[r.plate&&('🚗 '+r.plate),r.time&&('🕒 '+r.time),pay(r)&&('💳 '+pay(r))].filter(Boolean).join('  ·  ');
+    var meta=[(r.car||r.plate)&&('🚗 '+[r.car,r.plate].filter(Boolean).join(' · ')),r.time&&('🕒 '+r.time),pay(r)&&('💳 '+pay(r))].filter(Boolean).join('  ·  ');
     if(meta)info.appendChild(el('small','',meta));
     var ex=extra(r);if(ex)info.appendChild(el('small','','📝 '+ex));
     top.appendChild(info);top.appendChild(el('span','badge',label(r)));card.appendChild(top);
@@ -211,12 +212,12 @@ function addCustomer(){
   err.textContent='';busy=true;if(!rid)rid=newRid();
   var b=$('aSend');b.disabled=true;b.textContent='ثواني...';
   var notes='تسجيل من الكاشير'+($('aNotes').value.trim()?' | '+$('aNotes').value.trim():'');
-  var qs='action=join&service='+enc($('aSvc').value)+'&name='+enc(name)+'&phone='+enc(cleanPhone($('aPhone').value))+'&car=&plate='+enc($('aPlate').value.trim())+'&rid='+rid+'&notes='+enc(notes);
+  var qs='action=join&service='+enc($('aSvc').value)+'&name='+enc(name)+'&phone='+enc(cleanPhone($('aPhone').value))+'&car='+enc($('aCar').value.trim())+'&plate='+enc($('aPlate').value.trim())+'&rid='+rid+'&notes='+enc(notes);
   call(qs).then(function(j){
     busy=false;b.disabled=false;b.textContent='سجّله وهات الرقم';
     if(j.__bad||typeof j.n!=='number'){err.textContent='ما اتسجلش. جرّب تاني.';return}
     rid=null;toast('✅ اتسجل برقم '+j.n);
-    ['aName','aPlate','aPhone','aNotes'].forEach(function(i){$(i).value=''});
+    ['aName','aCar','aPlate','aPhone','aNotes'].forEach(function(i){$(i).value=''});
     $('add').hidden=true;load();
   }).catch(function(){busy=false;b.disabled=false;b.textContent='سجّله وهات الرقم';err.textContent='مفيش اتصال. جرّب تاني.'});
 }
