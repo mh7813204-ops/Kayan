@@ -31,7 +31,7 @@ input,select,textarea{width:100%;padding:11px 12px;border-radius:10px;border:1.5
 .tools{display:flex;gap:8px;margin-bottom:10px}
 .tools input{flex:1}
 .tabs{display:flex;gap:8px;margin-bottom:12px}
-.tab{flex:1;border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:8px 4px;font:inherit;font-weight:600;cursor:pointer;font-size:.9rem}
+.tab{flex:1;border:1.5px solid var(--line);background:transparent;color:var(--ink);border-radius:10px;padding:8px 2px;font:inherit;font-weight:600;cursor:pointer;font-size:.8rem}
 .tab[aria-pressed="true"]{border-color:var(--or);background:#2A1808}
 .card{background:var(--card);border:1.5px solid var(--line);border-radius:14px;padding:12px;margin-bottom:10px}
 .card.wash{border-color:#E0B93A}.card.ready{border-color:#3C8DC9}.card.done{border-color:#3C9D5A;opacity:.75}.card.cancel{border-color:#C0504A;opacity:.7}
@@ -106,7 +106,16 @@ function unlock(){try{actx=actx||new (window.AudioContext||window.webkitAudioCon
 function beep(){try{if(!actx)return;var o=actx.createOscillator(),g=actx.createGain();o.connect(g);g.connect(actx.destination);o.frequency.value=880;g.gain.value=.25;o.start();o.stop(actx.currentTime+.35)}catch(e){}}
 function toast(t){var x=$('toast');x.textContent=t;x.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(function(){x.hidden=true},3500)}
 function call(query){
-  return fetch(API+'?'+query).then(function(r){return r.text()}).then(function(t){try{return JSON.parse(t)}catch(e){return {__bad:1}}});
+  return new Promise(function(resolve,reject){
+    var i=0;
+    (function go(){
+      fetch(API+'?'+query).then(function(r){return r.text()}).then(function(t){
+        var j=null;try{j=JSON.parse(t)}catch(e){}
+        if((!j||j.error==='busy')&&i<2){i++;return setTimeout(go,1500*i)}
+        resolve(j||{__bad:1});
+      }).catch(function(e){if(i<2){i++;setTimeout(go,1500*i)}else reject(e)});
+    })();
+  });
 }
 function show(app){$('login').hidden=app;$('app').hidden=!app;['addBtn','refresh','logout'].forEach(function(i){$(i).hidden=!app})}
 function loginErr(m){
@@ -148,6 +157,7 @@ function set(r,field,val){
   var cur=field==='state'?r.state:r.note, nv=cur===val?'':val;
   if(field==='state')r.state=nv;else r.note=nv;
   render();
+  if(field==='state'&&nv==='جاهزة')toast('✅ اتشالت من الدور واتنقلت لتبويب جاهزة للتسليم');
   call('action=admin_set&pin='+enc(pin)+'&row='+r.row+'&n='+r.n+'&field='+field+'&value='+enc(nv)).then(function(j){
     if(!j.ok){toast('ما اتحفظش، بنحدّث البيانات');load()}
   }).catch(function(){toast('مفيش اتصال، التغيير ما اتحفظش');load()});
@@ -164,14 +174,16 @@ function render(){
   [['الإجمالي',c.all],['مستنية',c.wait],['بتتغسل',c.wash],['جاهزة',c.ready],['تم',c.done],['ملغية / مجاش',c.cancel]].forEach(function(x){
     var d=el('div','stat');d.appendChild(el('b','',x[1]));d.appendChild(el('span','',x[0]));st.appendChild(d)});
   var tb=$('tabs');tb.textContent='';
-  [['active','شغّالين ('+(c.wait+c.wash+c.ready)+')'],['done','خلصوا وملغيين ('+(c.done+c.cancel)+')'],['all','الكل ('+c.all+')']].forEach(function(x){
+  [['active','شغّالين ('+(c.wait+c.wash)+')'],['ready','جاهزة للتسليم ('+c.ready+')'],['done','خلصوا وملغيين ('+(c.done+c.cancel)+')'],['all','الكل ('+c.all+')']].forEach(function(x){
     var b=el('button','tab',x[1]);b.type='button';b.setAttribute('aria-pressed',String(tab===x[0]));
     b.addEventListener('click',function(){tab=x[0];render()});tb.appendChild(b)});
   var list=rows.filter(function(r){
     if(!match(r))return false;
     if(q||tab==='all')return true;
     var fin=r.note||r.state==='تم';
-    return tab==='done'?!!fin:!fin;
+    if(tab==='done')return !!fin;
+    if(tab==='ready')return !fin&&r.state==='جاهزة';
+    return !fin&&r.state!=='جاهزة';
   }).sort(function(a,b){return a.n-b.n});
   var box=$('list');box.textContent='';$('empty').hidden=list.length>0;
   list.forEach(function(r){
